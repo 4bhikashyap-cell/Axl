@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Axlchat Admin</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="admin-body">
+  <div id="admin-container" class="admin-container">
+    <h1>Axlchat Admin</h1>
+    <p id="ip-status">Checking IP...</p>
+    <div id="admin-panel" style="display:none;">
+      <input type="text" id="dev-id" placeholder="Enter User ID (e.g., axl123)" />
+      <button onclick="addDev()">Add Developer</button>
+      <button onclick="blankAll()">Blank All Data</button>
+      <p id="admin-msg"></p>
+      <a href="index.html" class="back-link">Back to Chat</a>
+    </div>
+    <div id="denied" class="denied">Access Denied! Wrong IP.</div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
+    import { getDatabase, ref, set, remove, query, orderByChild, equalTo, get } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyD4xrjmSN0dKUNanTKV1UxjP-Lr9E_aqUE",
+      authDomain: "axlchat-629b5.firebaseapp.com",
+      databaseURL: "https://axlchat-629b5-default-rtdb.firebaseio.com",
+      projectId: "axlchat-629b5",
+      storageBucket: "axlchat-629b5.firebasestorage.app",
+      messagingSenderId: "37035922930",
+      appId: "1:37035922930:web:7148d9204ec3e17906476b",
+      measurementId: "G-KYLJJ6E38X"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const ADMIN_IP = '157.48.1.179';
+
+    async function checkIP() {
+      try {
+        const res = await fetch('https://ipapi.co/json/');
+        const data = await res.json();
+        const ip = data.ip;
+        document.getElementById('ip-status').textContent = `Your IP: ${ip}`;
+        if (ip === ADMIN_IP) {
+          document.getElementById('admin-panel').style.display = 'block';
+          document.getElementById('ip-status').className = 'success';
+          document.getElementById('denied').style.display = 'none';
+        } else {
+          document.getElementById('denied').style.display = 'block';
+        }
+      } catch {
+        document.getElementById('ip-status').textContent = 'IP Check Failed - Access Denied';
+        document.getElementById('denied').style.display = 'block';
+      }
+    }
+
+    window.addDev = async () => {
+      const devId = document.getElementById('dev-id').value.trim();
+      if (!devId) return;
+
+      const usersRef = ref(db, 'users');
+      const idQuery = query(usersRef, orderByChild('id'), equalTo(devId));
+      const snap = await get(idQuery);
+      if (!snap.exists()) {
+        document.getElementById('admin-msg').textContent = 'ID not found!';
+        return;
+      }
+
+      const uid = Object.keys(snap.val())[0];
+      await set(ref(db, `users/${uid}/isDev`), true);
+      document.getElementById('admin-msg').textContent = 'Developer Added! Golden Crown Active.';
+      document.getElementById('admin-msg').className = 'success';
+      document.getElementById('dev-id').value = '';
+    };
+
+    window.blankAll = async () => {
+      if (confirm('Delete ALL data? Messages, Users, Bans? This is permanent!')) {
+        await remove(ref(db, 'messages'));
+        await remove(ref(db, 'users'));
+        await remove(ref(db, 'bans'));
+        await remove(ref(db, 'mutes'));
+        document.getElementById('admin-msg').textContent = 'All Data Blanked Successfully!';
+        document.getElementById('admin-msg').className = 'success';
+      }
+    };
+
+    checkIP();
+  </script>
+</body>
+</html>
