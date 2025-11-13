@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Axlchat - Chat with Friends</title>
+</head>
+<body>
+  <!-- Login Screen -->
+  <div id="login-screen" class="screen">
+    <div class="login-container">
+      <h1>Axlchat</h1>
+      <p>Chat with friends securely</p>
+      <form id="auth-form">
+        <input type="email" id="email" placeholder="Email" required>
+        <input type="text" id="username" placeholder="Unique Username" required>
+        <input type="password" id="password" placeholder="Password" required>
+        <button type="button" id="login-btn">Login</button>
+        <button type="button" id="signup-btn">Sign Up</button>
+        <p id="error-msg" class="error"></p>
+      </form>
+      <a href="admin.html" id="admin-link" style="display:none;">Admin Panel</a>
+    </div>
+  </div>
+
+  <!-- Main Chat App -->
+  <div id="chat-app" class="screen hidden">
+    <header>
+      <div class="header-left">
+        <h2>Axlchat</h2>
+        <span id="user-status" class="status online">Online</span>
+        <button id="admin-btn">Admin</button>
+        <button id="dark-toggle">🌙</button>
+      </div>
+      <button id="logout-btn">Logout</button>
+    </header>
+
+    <aside id="sidebar">
+      <div class="search-bar">
+        <input type="text" id="user-search" placeholder="Search users...">
+      </div>
+      <ul id="chat-list"></ul>
+    </aside>
+
+    <main id="main-chat">
+      <div id="chat-header">
+        <img src="https://via.placeholder.com/40" alt="Friend" class="avatar">
+        <div>
+          <h3 id="chat-title">Friends Chat</h3>
+          <span id="chat-status" class="status online">Online</span>
+        </div>
+      </div>
+      <ul id="messages-list"></ul>
+      <div id="typing-indicator" class="typing hidden">Someone is typing...</div>
+      <form id="message-form">
+        <button type="button" id="emoji-btn">😊</button>
+        <input type="file" id="image-input" accept="image/*" style="display:none">
+        <button type="button" id="attach-btn">📎</button>
+        <input type="text" id="message-input" placeholder="Type a message..." required>
+        <button type="submit" id="send-btn">Send</button>
+      </form>
+    </main>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js";
+    import { getDatabase, ref, onValue, push, set, serverTimestamp, query, orderByChild, equalTo, get } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
+    import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-storage.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyD4xrjmSN0dKUNanTKV1UxjP-Lr9E_aqUE",
+      authDomain: "axlchat-629b5.firebaseapp.com",
+      databaseURL: "https://axlchat-629b5-default-rtdb.firebaseio.com",
+      projectId: "axlchat-629b5",
+      storageBucket: "axlchat-629b5.firebasestorage.app",
+      messagingSenderId: "37035922930",
+      appId: "1:37035922930:web:7148d9204ec3e17906476b",
+      measurementId: "G-KYLJJ6E38X"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getDatabase(app);
+    const storage = getStorage(app);
+
+    // Elements
+    const loginScreen = document.getElementById('login-screen');
+    const chatApp = document.getElementById('chat-app');
+    const emailInput = document.getElementById('email');
+    const usernameInput = document.getElementById('username');
+    const passwordInput = document.getElementById('password');
+    const loginBtn = document.getElementById('login-btn');
+    const signupBtn = document.getElementById('signup-btn');
+    const errorMsg = document.getElementById('error-msg');
+    const adminLink = document.getElementById('admin-link');
+    const logoutBtn = document.getElementById('logout-btn');
+    const adminBtn = document.getElementById('admin-btn');
+    const darkToggle = document.getElementById('dark-toggle');
+    const messageForm = document.getElementById('message-form');
+    const messageInput = document.getElementById('message-input');
+    const messagesList = document.getElementById('messages-list');
+    const typingIndicator = document.getElementById('typing-indicator');
+    const chatList = document.getElementById('chat-list');
+    const userSearch = document.getElementById('user-search');
+    const attachBtn = document.getElementById('attach-btn');
+    const imageInput = document.getElementById('image-input');
+    const emojiBtn = document.getElementById('emoji-btn');
+
+    let currentUser = null;
+    let replyTo = null; // For swipe reply
+
+    // Auth State
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        currentUser = user;
+        loginScreen.classList.add('hidden');
+        chatApp.classList.remove('hidden');
+        await loadUserProfile(user.uid);
+        loadChats();
+        loadMessages();
+        document.getElementById('user-status').textContent = `${user.email} Online`;
+        adminLink.style.display = 'block';
+        if (await isDeveloper(user.uid)) adminBtn.textContent = 'Dev Panel';
+      } else {
+        loginScreen.classList.remove('hidden');
+        chatApp.classList.add('hidden');
+      }
+    });
+
+    // Load User Profile (Username, ID, isDev)
+    async function loadUserProfile(uid) {
+      const userRef = ref(db, `users/${uid}`);
+      const snapshot = await get(userRef);
+      if (!snapshot.exists()) {
+        // New user? Wait for signup
+      } else {
+        const data = snapshot.val();
+        // Update display if needed
+      }
+    }
+
+    // Check if Developer
+    async function isDeveloper(uid) {
+      const userRef = ref(db, `users/${uid}/isDev`);
+      const snapshot = await get(userRef);
+      return snapshot.val() === true;
+    }
+
+    // Signup with Unique Username + ID
+    signupBtn.addEventListener('click', async () => {
+      const email = emailInput.value;
+      const username = usernameInput.value.trim().toLowerCase();
+      const password = passwordInput.value;
+      if (!email || !username || !password) return;
+
+      // Check unique username
+      const usersRef = ref(db, 'users');
+      const usernameQuery = query(usersRef, orderByChild('username'), equalTo(username));
+      const snap = await get(usernameQuery);
+      if (snap.exists()) {
+        errorMsg.textContent = 'Username taken! Choose another.';
+        return;
+      }
+
+      // Generate ID (like Telegram: random 6-digit)
+      const id = 'axl' + Math.floor(100000 + Math.random() * 900000);
+
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const uid = userCredential.user.uid;
+        await set(ref(db, `users/${uid}`), {
+          email,
+          username,
+          id,
+          isDev: false,
+          joined: serverTimestamp()
+        });
+        errorMsg.textContent = '';
+      } catch (error) {
+        errorMsg.textContent = error.message;
+      }
+    });
+
+    // Login
+    loginBtn.addEventListener('click', async () => {
+      const email = emailInput.value;
+      const password = passwordInput.value;
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        errorMsg.textContent = '';
+      } catch (error) {
+        errorMsg.textContent = error.message;
+      }
+    });
+
+    // Logout
+    logoutBtn.addEventListener('click', () => signOut(auth));
+
+    // Admin Btn -> admin.html (but check IP client-side first)
+    adminBtn.addEventListener('click', async () => {
+      const ip = await fetchIP();
+      if (ip !== '157.48.1.179') {
+        alert('Access Denied! Admin only from authorized IP.');
+        return;
+      }
+      window.location.href = 'admin.html';
+    });
+
+    // Fetch Client IP (via API)
+    async function fetchIP() {
+      try {
+        const res = await fetch('https://ipapi.co/json/');
+        const data = await res.json();
+        return data.ip;
+      } catch {
+        return 'unknown'; // Fallback
+      }
+    }
+
+    // Dark Mode Toggle
+    darkToggle.addEventListener('click', () => {
+      document.body.classList.toggle('dark');
+      darkToggle.textContent = document.body.classList.contains('dark') ? '☀️' : '🌙';
+    });
+
+    // Load Chat List (Users Search)
+    async function loadChats() {
+      const usersRef = ref(db, 'users');
+      onValue(usersRef, (snapshot) => {
+        chatList.innerHTML = '';
+        const users = snapshot.val();
+        if (users) {
+          Object.entries(users).forEach(([uid, data]) => {
+            const displayName = `${data.username} @${data.id}`;
+            const isDev = data.isDev ? ' <span class="dev-crown">👑 DEVELOPER</span>' : '';
+            chatList.innerHTML += `
+              <li class="chat-item" onclick="selectChat('${uid}')">
+                <img src="https://via.placeholder.com/50" alt="${displayName}">
+                <div>
+                  <h4>${displayName}${isDev}</h4>
+                  <p>Joined: ${new Date(data.joined).toLocaleDateString()}</p>
+                </div>
+                <span class="status online"></span>
+              </li>
+            `;
+          });
+        }
+      });
+    }
+
+    window.selectChat = (uid) => {
+      document.getElementById('chat-title').innerHTML = `<img src="https://via.placeholder.com/40" class="avatar"> <div><h3>User ${uid.slice(0,8)}...</h3><span class="status online">Online</span></div>`;
+      // For multi-chat, load private room; here global for simplicity
+    };
+
+    // Search Users
+    userSearch.addEventListener('input', (e) => {
+      const term = e.target.value.toLowerCase();
+      const items = chatList.querySelectorAll('.chat-item');
+      items.forEach(item => {
+        const name = item.querySelector('h4').textContent.toLowerCase();
+        item.style.display = name.includes(term) ? 'flex' : 'none';
+      });
+    });
+
+    // Load Messages with Badges, Mentions, Commands
+    function loadMessages() {
+      const messagesRef = ref(db, 'messages');
+      onValue(messagesRef, (snapshot) => {
+        messagesList.innerHTML = '';
+        const data = snapshot.val();
+        if (data) {
+          Object.entries(data).sort((a,b) => a[1].timestamp - b[1].timestamp).forEach(([key, msg]) => {
+            if (currentUser.uid === msg.uid || !msg.muted) { // Hide muted if not sender
+              const isSent = msg.uid === currentUser.uid;
+              const userData = getUserByUid(msg.uid); // Async helper
+              const name = userData ? `${userData.username} @${userData.id}` : 'User';
+              let badge = '';
+              if (userData && userData.isDev) badge = '<span class="dev-crown">👑 DEVELOPER</span>';
+              const time = new Date(msg.timestamp).toLocaleTimeString();
+              let content = msg.text.replace(/@(\w+)/g, '<a href="#" class="mention">@$1</a>'); // Mentions clickable
+              if (msg.image) content = `<img src="${msg.image}" alt="Image">` + content;
+              const seen = msg.seen ? '✅' : '✓';
+              const msgHtml = `
+                <li class="message ${isSent ? 'sent' : 'received'}" data-msg="${key}" ontouchstart="handleSwipe(event)">
+                  <div class="message-bubble">${content} ${badge}</div>
+                  <div class="message-time">${time} ${isSent ? seen : ''}</div>
+                </li>
+              `;
+              messagesList.innerHTML += msgHtml;
+            }
+          });
+        }
+        messagesList.scrollTop = messagesList.scrollHeight;
+      });
+    }
+
+    // Get User by UID (Helper)
+    async function getUserByUid(uid) {
+      const userRef = ref(db, `users/${uid}`);
+      const snap = await get(userRef);
+      return snap.val();
+    }
+
+    // Send Message / Command
+    messageForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = messageInput.value.trim();
+      if (!text && !imageInput.files[0]) return;
+
+      const user = auth.currentUser;
+      if (await isBanned(user.uid)) return; // Check ban
+
+      const messagesRef = ref(db, 'messages');
+      const newMsgRef = push(messagesRef);
+
+      let finalText = text;
+      if (replyTo) {
+        finalText = `> Reply to ${replyTo.name}: ${text}\n${text}`; // Quote
+        replyTo = null;
+      }
+
+      if (imageInput.files[0]) {
+        const file = imageInput.files[0];
+        const path = storageRef(storage, `images/${Date.now()}_${file.name}`);
+        await uploadBytes(path, file);
+        const url = await getDownloadURL(path);
+        await set(newMsgRef, { uid: user.uid, text: finalText, image: url, timestamp: serverTimestamp(), seen: false, muted: false });
+      } else {
+        // Check if Command (Dev only)
+        if (text.startsWith('!') && await isDeveloper(user.uid)) {
+          await processCommand(text, user.uid);
+          messageInput.value = '';
+          return;
+        }
+        await set(newMsgRef, { uid: user.uid, text: finalText, image: '', timestamp: serverTimestamp(), seen: false, muted: false });
+      }
+
+      messageInput.value = '';
+      imageInput.value = '';
+    });
+
+    // Process Dev Commands
+    async function processCommand(cmd, devUid) {
+      const parts = cmd.slice(1).split(' '); // !ban @user
+      const action = parts[0].toLowerCase();
+      const targetMention = parts[1]; // @username
+      if (!targetMention) return;
+
+      const targetUid = await getUidByMention(targetMention.slice(1)); // Extract username
+      if (!targetUid) return;
+
+      const bansRef = ref(db, 'bans');
+      const mutesRef = ref(db, 'mutes');
+      switch (action) {
+        case 'ban':
+          await set(ref(bansRef, targetUid), { banned: true, by: devUid, time: serverTimestamp() });
+          sendSystemMsg(`User ${targetMention} banned by dev.`);
+          break;
+        case 'unban':
+          await set(ref(bansRef, targetUid), null);
+          sendSystemMsg(`User ${targetMention} unbanned.`);
+          break;
+        case 'mute':
+          await set(ref(mutesRef, targetUid), { muted: true, by: devUid });
+          sendSystemMsg(`User ${targetMention} muted.`);
+          break;
+        case 'unmute':
+          await set(ref(mutesRef, targetUid), null);
+          sendSystemMsg(`User ${targetMention} unmuted.`);
+          break;
+        case 'kick':
+          await set(ref(bansRef, targetUid), { banned: true, temp: true, expires: Date.now() + 3600000, by: devUid }); // 1hr
+          sendSystemMsg(`User ${targetMention} kicked for 1hr.`);
+          break;
+        case 'cmds':
+          const cmds = '!ban @user, !unban @user, !mute @user, !unmute @user, !kick @user, !cmds';
+          await set(push(ref(db, 'messages')), { uid: devUid, text: `Dev Commands: ${cmds}`, timestamp: serverTimestamp(), system: true });
+          break;
+      }
+    }
+
+    // Get UID by Mention (Username)
+    async function getUidByMention(username) {
+      const usersRef = ref(db, 'users');
+      const q = query(usersRef, orderByChild('username'), equalTo(username));
+      const snap = await get(q);
+      if (snap.exists()) {
+        const data = snap.val();
+        return Object.keys(data)[0]; // First match
+      }
+      return null;
+    }
+
+    // Send System Msg
+    async function sendSystemMsg(text) {
+      const sysRef = push(ref(db, 'messages'));
+      await set(sysRef, { uid: 'system', text, timestamp: serverTimestamp(), system: true });
+    }
+
+    // Check if Banned
+    async function isBanned(uid) {
+      const banRef = ref(db, `bans/${uid}`);
+      const snap = await get(banRef);
+      if (snap.exists()) {
+        const data = snap.val();
+        if (data.temp && Date.now() > data.expires) {
+          await set(banRef, null); // Auto unban
+          return false;
+        }
+        return data.banned;
+      }
+      return false;
+    }
+
+    // Typing
+    let typingTimer;
+    messageInput.addEventListener('input', () => {
+      typingIndicator.classList.remove('hidden');
+      clearTimeout(typingTimer);
+      typingTimer = setTimeout(() => typingIndicator.classList.add('hidden'), 1500);
+    });
+
+    // Attach Image
+    attachBtn.addEventListener('click', () => imageInput.click());
+
+    // Emoji
+    emojiBtn.addEventListener('click', () => messageInput.value += '😊');
+
+    // Swipe to Reply (Mobile Touch)
+    window.handleSwipe = (e) => {
+      let startX = 0;
+      const msg = e.target.closest('.message');
+      msg.addEventListener('touchstart', (ev) => startX = ev.touches[0].clientX);
+      msg.addEventListener('touchend', (ev) => {
+        const endX = ev.changedTouches[0].clientX;
+        if (endX - startX > 50) { // Swipe right
+          replyTo = { name: msg.querySelector('.message-bubble').textContent.slice(0,20) + '...' };
+          messageInput.placeholder = 'Reply to ' + replyTo.name + '...';
+        }
+      });
+    };
+
+    // Mentions Click (Scroll to User Msgs - Simple)
+    messagesList.addEventListener('click', (e) => {
+      if (e.target.classList.contains('mention')) {
+        const username = e.target.textContent.slice(1);
+        // Highlight or scroll - for now alert
+        alert(`Mention: ${username} - Feature coming!`);
+      }
+    });
+
+    // Mark Seen
+    const messagesRef = ref(db, 'messages');
+    onValue(messagesRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        Object.keys(data).forEach(async key => {
+          const msg = data[key];
+          if (msg.uid !== currentUser.uid && !msg.seen) {
+            await set(ref(db, `messages/${key}/seen`), true);
+          }
+        });
+      }
+    });
+  </script>
+</body>
+</html>
